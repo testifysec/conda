@@ -45,3 +45,15 @@ rever/
 
 # setuptools-scm
 conda/_version.py
+
+build-policy-signed.yaml
+
+build-policy.yaml
+
+conda/witness/binaries/witness_darwin_arm64
+
+policy-key.pem
+
+policy-key.pub
+
+verify-result.json
