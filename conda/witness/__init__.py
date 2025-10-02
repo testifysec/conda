@@ -181,6 +181,7 @@ def run_witness_verify(
     policy_ca_roots: Optional[list[str]] = None,
     policy_ca_intermediates: Optional[list[str]] = None,
     extra_options: Optional[str] = None,
+    log_level: str = "info",
 ) -> CompletedProcess:
     """
     Run the witness verify command with the specified arguments.
@@ -214,7 +215,7 @@ def run_witness_verify(
         )
     
     # Build witness command
-    cmd = [str(witness_path), "verify"]
+    cmd = [str(witness_path), "verify", "--log-level", log_level]
     
     # Add required arguments
     cmd.extend(["--policy", policy])
@@ -261,12 +262,21 @@ def run_witness_verify(
     
     # Execute witness command
     try:
+        print(f"Running: {' '.join(cmd)}")
         result = subprocess.run(
             cmd,
-            capture_output=True,
-            text=True,
+            capture_output=False,  # Let witness output directly to terminal
             check=False,  # Don't raise on non-zero exit code
         )
+        
+        # Create a mock result object for compatibility
+        class MockResult:
+            def __init__(self, returncode):
+                self.returncode = returncode
+                self.stdout = ""
+                self.stderr = ""
+        
+        result = MockResult(result.returncode)
         
         log.debug(f"Witness exit code: {result.returncode}")
         if result.stdout:

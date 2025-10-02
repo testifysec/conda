@@ -138,6 +138,13 @@ def configure_parser(sub_parsers: _SubParsersAction, **kwargs) -> ArgumentParser
         metavar="OPTIONS",
         help="Additional options to pass directly to witness verify command",
     )
+    p.add_argument(
+        "--witness-log-level",
+        metavar="LEVEL",
+        default="debug",
+        choices=["debug", "info", "warn", "error"],
+        help="Log level for witness verify command (default: debug)",
+    )
     
     p.set_defaults(func="conda.cli.main_verify.execute")
     
@@ -224,6 +231,7 @@ def execute(args: Namespace, parser: ArgumentParser) -> int:
         "policy_ca_roots": args.policy_ca_roots,
         "policy_ca_intermediates": args.policy_ca_intermediates,
         "extra_options": args.witness_options,
+        "log_level": args.witness_log_level,
     }
     
     # Run witness verify
@@ -240,16 +248,11 @@ def execute(args: Namespace, parser: ArgumentParser) -> int:
                 "witness_output": result.stdout,
             })
         else:
+            # Witness outputs directly to terminal, just show final result
             if result.returncode == 0:
                 print("✓ Verification successful")
-                if result.stdout:
-                    print(result.stdout)
             else:
                 print("✗ Verification failed", file=sys.stderr)
-                if result.stderr:
-                    print(result.stderr, file=sys.stderr)
-                elif result.stdout:
-                    print(result.stdout, file=sys.stderr)
                     
         return result.returncode
         

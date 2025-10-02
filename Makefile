@@ -170,22 +170,34 @@ conda-verify:
 	export PYTHONPATH="$${PWD}:$${PYTHONPATH}"; \
 	if [ -f conda-build.attestation.json ] && [ -s conda-build.attestation.json ]; then \
 		echo "Found attestation file, running conda verify with policy..."; \
-		python3 -m conda.cli.main verify \
+		echo ""; \
+		python3 -W ignore::RuntimeWarning -m conda.cli.main verify \
 			--artifactfile "$$WHEEL" \
 			--policy build-policy-signed.yaml \
 			--publickey policy-key.pub \
-			--attestations conda-build.attestation.json \
-			&& echo "✅ VERIFICATION SUCCESSFUL!" \
-			|| echo "❌ Verification failed (check witness compatibility)"; \
+			--attestations conda-build.attestation.json; \
+		VERIFY_EXIT_CODE=$$?; \
+		echo ""; \
+		if [ $$VERIFY_EXIT_CODE -eq 0 ]; then \
+			echo "✅ VERIFICATION SUCCESSFUL!"; \
+		else \
+			echo "❌ VERIFICATION FAILED! (exit code: $$VERIFY_EXIT_CODE)"; \
+			exit $$VERIFY_EXIT_CODE; \
+		fi; \
 	else \
 		echo "No attestations found, running basic conda verify..."; \
-		python3 -m conda.cli.main verify \
+		python3 -W ignore::RuntimeWarning -m conda.cli.main verify \
 			--artifactfile "$$WHEEL" \
 			--policy build-policy-signed.yaml \
-			--publickey policy-key.pub \
-			2>/dev/null \
-			&& echo "✅ Package verified (no attestations)" \
-			|| echo "❌ No attestations available - run 'make conda-build-attested' to build with attestations"; \
+			--publickey policy-key.pub; \
+		VERIFY_EXIT_CODE=$$?; \
+		echo ""; \
+		if [ $$VERIFY_EXIT_CODE -eq 0 ]; then \
+			echo "✅ PACKAGE VERIFIED!"; \
+		else \
+			echo "❌ VERIFICATION FAILED! (exit code: $$VERIFY_EXIT_CODE)"; \
+			exit $$VERIFY_EXIT_CODE; \
+		fi; \
 	fi; \
 	echo ""
 
