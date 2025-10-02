@@ -36,21 +36,8 @@ jobs:
       # =========================================================
       # Build Conda Package WITH Witness Attestation
       # =========================================================
-      - name: Build Conda with Witness Attestation (Sigstore)
-        uses: testifysec/witness-run-action@v0.3.3
-        with:
-          step: "conda-package-build"
-          attestations: "environment git github command-run material product"
-          command: "make witness-build"
-          # Explicitly enable Sigstore for keyless signing
-          enable-sigstore: true
-          # This uses GitHub's OIDC token for signing via Fulcio
-          # No private keys needed - cryptographically bound to this GitHub Actions run
-          outfile: conda-build.attestation.json
-          # Disable Archivista to ensure attestation is written locally
-          enable-archivista: false
-          # Optional: Add trace for debugging
-          trace: false
+      - name: Build Conda with Local Witness Attestation
+        run: make witness-build-with-attestation
 
       - name: Create and Sign Verification Policy
         run: make witness-sign-policy

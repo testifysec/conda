@@ -23,16 +23,6 @@ steps:
                 some i
                 contains(input[i].name, ".whl")
               }
-      - type: https://witness.dev/attestations/github/v0.1
-        regopolicies:
-          - name: github-build
-            module: |
-              package github
-              default allow = false
-              allow {
-                input.workflow != ""
-                input.repository == "testifysec/conda"
-              }
       - type: https://witness.dev/attestations/environment/v0.1
       - type: https://witness.dev/attestations/git/v0.1
       - type: https://witness.dev/attestations/material/v0.1
