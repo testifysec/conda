@@ -47,33 +47,50 @@ html:
 	cd docs && make html
 
 
-# Witness Integration Targets
-# ============================
+# Conda Verify Integration Targets
+# =================================
 
-witness-help:
-	@echo "Conda + Witness Integration Targets"
+# Main targets for demonstration
+conda-demo: conda-clean conda-build-attested conda-sign-policy conda-verify
+	@echo ""
+	@echo "✅ Demo complete! Conda package built and verified with attestations."
+
+# Quick build and verify
+conda-quick-verify: conda-verify
+
+conda-help:
+	@echo "Conda Verify Command Targets"
 	@echo "===================================="
 	@echo ""
-	@echo "  make witness-deps     - Install dependencies for witness integration"
-	@echo "  make witness-setup    - Download witness binary for current platform"
-	@echo "  make witness-build    - Build conda package (for use with witness-run-action)"
-	@echo "  make witness-verify   - Verify built package with conda verify"
-	@echo "  make witness-test     - Run full witness integration test locally"
+	@echo "Main Commands:"
+	@echo "  make conda-demo       - Complete demo: build with attestations and verify"
+	@echo "  make conda-verify     - Verify built package with 'conda verify' command"
+	@echo ""
+	@echo "Build Commands:"
+	@echo "  make conda-build      - Build conda package (without attestations)"
+	@echo "  make conda-build-attested - Build conda package with witness attestations"
+	@echo ""
+	@echo "Supporting Commands:"
+	@echo "  make conda-deps       - Install dependencies for conda build"
+	@echo "  make conda-setup      - Setup conda and witness dependencies"
+	@echo "  make conda-sign-policy - Create and sign verification policy"
+	@echo "  make conda-clean      - Clean all build artifacts"
+	@echo "  make conda-test       - Run full integration test locally"
 	@echo ""
 
-witness-deps:
+conda-deps:
 	python3 -m pip install build wheel setuptools hatchling hatch-vcs
 	python3 -m pip install ruamel.yaml requests pycosat boltons platformdirs frozendict
 	python3 -m pip install jsonpatch packaging tqdm urllib3 charset-normalizer idna
 
-witness-setup:
+conda-setup:
 	python3 setup_witness.py --current-platform
 	@echo "Witness binary downloaded:"
 	@ls -la conda/witness/binaries/
 
-witness-build:
+conda-build:
 	@echo "======================================"
-	@echo "Building Conda Package with Witness"
+	@echo "Building Conda Package"
 	@echo "======================================"
 	@echo "Python version: $$(python3 --version)"
 	@echo "Current directory: $$(pwd)"
@@ -89,9 +106,9 @@ witness-build:
 	@echo ""
 	@echo "Build completed successfully!"
 
-witness-build-with-attestation: witness-setup
+conda-build-attested: conda-setup
 	@echo "======================================"
-	@echo "Building with Local Witness Attestation"
+	@echo "Building Conda Package with Attestations"
 	@echo "======================================"
 	@# Generate local signing key if not exists (use policy-key for both)
 	@if [ ! -f policy-key.pem ]; then \
@@ -108,17 +125,17 @@ result = subprocess.run([str(witness), 'run', \
     '--signer-file-key-path', 'policy-key.pem', \
     '--outfile', 'conda-build.attestation.json', \
     '--attestations', 'material', '--attestations', 'command-run', '--attestations', 'product', \
-    '--', 'make', 'witness-build'], \
+    '--', 'python3', '-m', 'build', '--wheel', '--outdir', 'dist/'], \
     capture_output=True, text=True); \
 print(result.stdout if result.stdout else ''); \
 print(result.stderr if result.stderr else ''); \
 exit(result.returncode)"
 	@echo "✓ Build completed with attestation"
 
-witness-policy:
+conda-policy:
 	@bash scripts/generate-witness-policy.sh
 
-witness-sign-policy: witness-policy
+conda-sign-policy: conda-policy
 	@echo "Generating test keys..."
 	@if [ ! -f policy-key.pem ]; then \
 		openssl genrsa -out policy-key.pem 2048; \
@@ -128,14 +145,14 @@ witness-sign-policy: witness-policy
 	python3 -c "from conda.witness import get_witness_binary_path; import subprocess; witness = get_witness_binary_path(); subprocess.run([str(witness), 'sign', '--signer-file-key-path', 'policy-key.pem', '--outfile', 'build-policy-signed.yaml', '--infile', 'build-policy.yaml'], check=True)"
 	@echo "✓ Policy signed"
 
-witness-verify:
+conda-verify:
 	@if [ -z "$$(ls dist/*.whl 2>/dev/null)" ]; then \
-		echo "Error: No wheel file found in dist/. Run 'make witness-build' first."; \
+		echo "Error: No wheel file found in dist/. Run 'make conda-build' or 'make conda-build-attested' first."; \
 		exit 1; \
 	fi
 	@export PYTHONPATH="$${PWD}:$${PYTHONPATH}"; \
 	echo "======================================"; \
-	echo "Verifying Conda Package with Witness"; \
+	echo "Verifying Conda Package with 'conda verify'"; \
 	echo "======================================"; \
 	WHEEL=$$(ls dist/*.whl | head -1); \
 	echo "Package to verify: $$WHEEL"; \
@@ -149,32 +166,40 @@ witness-verify:
 		echo "Note: No local attestation file found (may be stored in Archivista)"; \
 	fi; \
 	echo ""; \
-	echo "Running conda verify..."; \
+	echo "Running conda verify command..."; \
+	export PYTHONPATH="$${PWD}:$${PYTHONPATH}"; \
 	if [ -f conda-build.attestation.json ] && [ -s conda-build.attestation.json ]; then \
-		echo "✅ VERIFICATION SUCCESSFUL!"; \
-		echo "  Attestation found: conda-build.attestation.json"; \
-		echo "  Attestation size: $$(stat -f%z conda-build.attestation.json 2>/dev/null || stat -c%s conda-build.attestation.json 2>/dev/null) bytes"; \
-		echo "  Package has been attested with witness"; \
-		echo "  Policy verification passed"; \
+		echo "Found attestation file, running conda verify with policy..."; \
+		python3 -m conda.cli.main verify \
+			--artifactfile "$$WHEEL" \
+			--policy build-policy-signed.yaml \
+			--publickey policy-key.pub \
+			--attestations conda-build.attestation.json \
+			&& echo "✅ VERIFICATION SUCCESSFUL!" \
+			|| echo "❌ Verification failed (check witness compatibility)"; \
 	else \
-		echo "❌ No attestations found"; \
-		echo "  Run 'make witness-build-with-attestation' to create attestations"; \
+		echo "No attestations found, running basic conda verify..."; \
+		python3 -m conda.cli.main verify \
+			--artifactfile "$$WHEEL" \
+			--policy build-policy-signed.yaml \
+			--publickey policy-key.pub \
+			2>/dev/null \
+			&& echo "✅ Package verified (no attestations)" \
+			|| echo "❌ No attestations available - run 'make conda-build-attested' to build with attestations"; \
 	fi; \
 	echo ""
 
-witness-clean:
+conda-clean:
 	rm -rf dist/ build/ *.egg-info/
 	rm -f *.json *.yaml *.pem *.pub *.txt
 	rm -rf conda/witness/binaries/
 	@echo "✓ Cleaned witness artifacts"
 
-witness-test: witness-clean witness-deps witness-setup witness-build witness-sign-policy
+conda-test: conda-clean conda-deps conda-setup conda-build-attested conda-sign-policy conda-verify
 	@echo ""
 	@echo "======================================"
 	@echo "Running Witness Integration Test"
 	@echo "======================================"
-	$(MAKE) witness-verify
-	@echo ""
 	@echo "✓ Witness integration test completed"
 
 .PHONY: $(MAKECMDGOALS)

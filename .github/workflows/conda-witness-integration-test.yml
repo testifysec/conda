@@ -28,25 +28,25 @@ jobs:
           python-version: "3.11"
 
       - name: Install Dependencies
-        run: make witness-deps
+        run: make conda-deps
 
-      - name: Setup Witness Binary
-        run: make witness-setup
+      - name: Setup Conda and Witness
+        run: make conda-setup
 
       # =========================================================
       # Build Conda Package WITH Witness Attestation
       # =========================================================
-      - name: Build Conda with Local Witness Attestation
-        run: make witness-build-with-attestation
+      - name: Build Conda with Attestations
+        run: make conda-build-attested
 
       - name: Create and Sign Verification Policy
-        run: make witness-sign-policy
+        run: make conda-sign-policy
 
       # =========================================================
       # Verify the Built Conda Package with Witness Attestation
       # =========================================================
       - name: Verify Built Package with Conda Verify
-        run: make witness-verify
+        run: make conda-verify
 
       - name: Test Conda Verify Command
         run: |
