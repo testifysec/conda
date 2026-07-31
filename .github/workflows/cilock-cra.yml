@@ -47,7 +47,7 @@ jobs:
         # so bind the conda product by UUID until that lands.
         run: |
           cilock login --workflow-identity --platform-url "$PLATFORM_URL" \
-            --product-id 899cef5b-c7af-429f-b8e5-bd8c84ed6152 --product-name conda
+            --product 899cef5b-c7af-429f-b8e5-bd8c84ed6152
 
       - name: SBOM capture (CRA Annex I Part II(1))
         run: |
