@@ -42,7 +42,12 @@ jobs:
           syft version && trivy version && gitleaks version
 
       - name: cilock login (workflow identity)
-        run: cilock login --workflow-identity --platform-url "$PLATFORM_URL"
+        # Explicit product binding: the repo->product connection can't be
+        # created yet (judge tenant-trigger bug, see testifysec/judge issue),
+        # so bind the conda product by UUID until that lands.
+        run: |
+          cilock login --workflow-identity --platform-url "$PLATFORM_URL" \
+            --product-id 899cef5b-c7af-429f-b8e5-bd8c84ed6152 --product-name conda
 
       - name: SBOM capture (CRA Annex I Part II(1))
         run: |
