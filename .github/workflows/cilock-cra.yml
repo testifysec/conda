@@ -1,0 +1,87 @@
+name: cilock-cra
+# CRA supply-chain evidence: SBOM, CVE scan, secret scan, and an attested build,
+# each wrapped by cilock, keyless-signed against the TestifySec platform Fulcio,
+# RFC3161-timestamped, and uploaded to the tenant Archivista. The ambient GitHub
+# OIDC identity is trusted via `cilock trust github testifysec/conda`.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  id-token: write # ambient OIDC for keyless signing + workflow-identity login
+  contents: read
+
+env:
+  PLATFORM_URL: https://platform.testifysec.com
+  EVIDENCE_DIR: ${{ github.workspace }}/.cra-evidence
+
+jobs:
+  cra-evidence:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install cilock (platform-served, matches platform version)
+        run: |
+          mkdir -p "$HOME/.local/bin" "$EVIDENCE_DIR"
+          curl -fsSL -o "$HOME/.local/bin/cilock" "$PLATFORM_URL/api/tools/cilock/linux-amd64"
+          chmod +x "$HOME/.local/bin/cilock"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          "$HOME/.local/bin/cilock" version
+
+      - name: Install scanners (syft, trivy, gitleaks)
+        run: |
+          curl -sSfL -o /tmp/syft-install.sh https://raw.githubusercontent.com/anchore/syft/main/install.sh
+          sh /tmp/syft-install.sh -b "$HOME/.local/bin"
+          curl -sSfL -o /tmp/trivy-install.sh https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh
+          sh /tmp/trivy-install.sh -b "$HOME/.local/bin"
+          curl -sSL -o /tmp/gitleaks.tar.gz https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
+          tar -xzf /tmp/gitleaks.tar.gz -C "$HOME/.local/bin" gitleaks
+          syft version && trivy version && gitleaks version
+
+      - name: cilock login (workflow identity)
+        run: cilock login --workflow-identity --platform-url "$PLATFORM_URL"
+
+      - name: SBOM capture (CRA Annex I Part II(1))
+        run: |
+          cilock run --step sbom-capture --workingdir "$EVIDENCE_DIR" \
+            -a sbom,environment,git,github \
+            --platform-url "$PLATFORM_URL" --enable-archivista \
+            -o "$EVIDENCE_DIR/sbom-capture.bundle.json" --output-format json \
+            -- syft "dir:$GITHUB_WORKSPACE" -o cyclonedx-json=conda.cdx.json
+
+      - name: CVE scan (CRA Annex I Part I — no known exploitable vulns)
+        run: |
+          cilock run --step trivy-scan --workingdir "$EVIDENCE_DIR" \
+            -a sarif,environment,git,github \
+            --platform-url "$PLATFORM_URL" --enable-archivista \
+            -o "$EVIDENCE_DIR/trivy-scan.bundle.json" --output-format json \
+            -- trivy fs --scanners vuln --format sarif --output trivy.sarif "$GITHUB_WORKSPACE"
+
+      - name: Secret scan (CRA Annex I Part II — secure development)
+        run: |
+          cilock run --step secret-scan --workingdir "$EVIDENCE_DIR" \
+            -a sarif,environment,git,github \
+            --platform-url "$PLATFORM_URL" --enable-archivista \
+            -o "$EVIDENCE_DIR/secret-scan.bundle.json" --output-format json \
+            -- gitleaks git "$GITHUB_WORKSPACE" --report-format sarif --report-path gitleaks.sarif --exit-code 0
+
+      - name: Attested build (CRA Annex VII — provenance)
+        run: |
+          cilock run --step build --workingdir "$EVIDENCE_DIR" \
+            -a environment,git,github,slsa \
+            --platform-url "$PLATFORM_URL" --enable-archivista \
+            -o "$EVIDENCE_DIR/build.bundle.json" --output-format json \
+            -- python3 -m pip wheel --no-deps --no-cache-dir -w . "$GITHUB_WORKSPACE"
+
+      - name: Upload evidence artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cra-evidence-${{ github.sha }}
+          path: |
+            ${{ env.EVIDENCE_DIR }}/*.bundle.json
+            ${{ env.EVIDENCE_DIR }}/*.whl
+            ${{ env.EVIDENCE_DIR }}/*.cdx.json
+            ${{ env.EVIDENCE_DIR }}/*.sarif
