@@ -85,6 +85,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: cra-evidence-${{ github.sha }}
+          include-hidden-files: true # EVIDENCE_DIR is a dot-directory
           path: |
             ${{ env.EVIDENCE_DIR }}/*.bundle.json
             ${{ env.EVIDENCE_DIR }}/*.whl
